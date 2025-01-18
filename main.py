@@ -3,9 +3,6 @@ import time
 import socket
 import json
 from NatNetClient import NatNetClient
-import DataDescriptions
-import MoCapData
-
 
 def my_parse_args(arg_list, args_dict):
     """
@@ -27,90 +24,62 @@ def my_parse_args(arg_list, args_dict):
 
 def format_data(data_dict):
     """
-    Format the raw MoCap data into a more specific structure:
-    - Model Name
-    - Marker Count
-    - Individual Markers
-    - Rotation for Model D3
+    Format the raw MoCap data into a structured dictionary.
+    Each rigid body data is represented with frame number and timestamp.
+    Only include rigid bodies with tracking_valid set to True.
     """
     try:
-        formatted_data = {
-            "model_name": None,  # Will be filled with model name
-            "marker_count": None,  # Will be filled with marker count
-            "markers": [],  # List to hold markers
-            "rotation": None,  # Rotation data for model
-        }
+        frame_number = data_dict.get("frame_number", None)
+        timestamp = data_dict.get("timestamp", None)
+        rigid_bodies = data_dict.get("rigid_bodies", [])
 
-        # Iterate through marker sets and extract relevant data
-        for marker_set in data_dict.get("marker_sets", []):
-            if marker_set.get("name") == "D3":
-                formatted_data["model_name"] = marker_set.get("name")
-                formatted_data["marker_count"] = marker_set.get("marker_count")
-                
-                # Assuming 3 markers for model D3
-                for i in range(min(3, len(marker_set.get("markers", [])))):
-                    formatted_data["markers"].append(marker_set["markers"][i])
-                
-                # Add rotation if available
-                formatted_data["rotation"] = marker_set.get("rotation")
-
-        return formatted_data
+        formatted_rows = []
+        for rb in rigid_bodies:
+            if rb.get("tracking_valid", False):  # Only process valid tracked bodies
+                formatted_rows.append({
+                    "Frame Number": frame_number,
+                    "Timestamp": timestamp,
+                    "Rigid Body ID": rb.get("id", None),
+                    "Position X": rb.get("position", [None, None, None])[0],
+                    "Position Y": rb.get("position", [None, None, None])[1],
+                    "Position Z": rb.get("position", [None, None, None])[2],
+                    "Rotation X": rb.get("rotation", [None, None, None, None])[0],
+                    "Rotation Y": rb.get("rotation", [None, None, None, None])[1],
+                    "Rotation Z": rb.get("rotation", [None, None, None, None])[2],
+                    "Rotation W": rb.get("rotation", [None, None, None, None])[3],
+                })
+        return formatted_rows
 
     except Exception as e:
         print(f"Error formatting data: {e}")
-        return {}
-
-
-
+        return []
+    
 def receive_new_frame(data_dict):
     """
     Callback function triggered for each new frame of MoCap data.
-    Formats the data and sends it over the network if the socket is connected.
+    Formats the data and streams it to the client as JSON.
     """
     global client_socket
 
-    # print(f"Raw frame data: {data_dict}")  # Debug statement
-
-
-    formatted = format_data(data_dict)
-
-    # print(f"formatted frame data: {formatted}")  # Debug statement
+    # Format the data
+    formatted_rows = format_data(data_dict)
 
     if client_socket:
         try:
-            json_data = json.dumps(data_dict)
-            client_socket.sendall(json_data.encode("utf-8"))
+            # Send each row as a separate JSON object
+            for row in formatted_rows:
+                json_data = json.dumps(row)
+                client_socket.sendall(json_data.encode("utf-8") + b'\n')  # Add newline for easy parsing
         except Exception as e:
             print(f"Error sending data: {e}")
     else:
         print("No client connected. Data not sent.")
 
 
-def receive_rigid_body_frame(new_id, position, rotation):
-    """
-    Callback function triggered for each rigid body in the MoCap data.
-    Currently unused but available for future expansion.
-    """
-    pass
-
-
-def print_configuration(natnet_client):
-    """
-    Print the current NatNet client configuration.
-    """
-    print("Connection Configuration:")
-    print("  Client:          %s" % natnet_client.local_ip_address)
-    print("  Server:          %s" % natnet_client.server_ip_address)
-    print("  Command Port:    %d" % natnet_client.command_port)
-    print("  Data Port:       %d" % natnet_client.data_port)
-
-
-# Global variable for socket connection
-client_socket = None
-
+# Main script
 if __name__ == "__main__":
     optionsDict = {}
-    optionsDict["clientAddress"] = "127.0.0.1"
+    optionsDict["clientAddress"] = "0.0.0.0"
     optionsDict["serverAddress"] = "127.0.0.1"
     optionsDict["use_multicast"] = True
 
@@ -139,7 +108,6 @@ if __name__ == "__main__":
 
     # Assign callback functions
     streaming_client.new_frame_listener = receive_new_frame
-    streaming_client.rigid_body_listener = receive_rigid_body_frame
 
     # Start the NatNet client
     is_running = streaming_client.run()
@@ -148,14 +116,6 @@ if __name__ == "__main__":
         server_socket.close()
         sys.exit(1)
 
-    # Check connection status
-    time.sleep(1)
-    if not streaming_client.connected():
-        print("ERROR: Could not connect properly. Ensure Motive streaming is enabled.")
-        server_socket.close()
-        sys.exit(2)
-
-    print_configuration(streaming_client)
     print("\nNatNet Client successfully connected. Listening for data...")
 
     # Keep the script running
