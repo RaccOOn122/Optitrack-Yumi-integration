@@ -26,6 +26,7 @@ def format_data(data_dict):
     """
     Format the raw MoCap data into a structured dictionary.
     Each rigid body data is represented with frame number and timestamp.
+<<<<<<< HEAD
     Replace rigid body IDs with their names.
     """
     try:
@@ -50,6 +51,22 @@ def format_data(data_dict):
                     "Frame Number": frame_number,
                     "Timestamp": timestamp,
                     "Rigid Body Name": rigid_body_name,
+=======
+    Only include rigid bodies with tracking_valid set to True.
+    """
+    try:
+        frame_number = data_dict.get("frame_number", None)
+        timestamp = data_dict.get("timestamp", None)
+        rigid_bodies = data_dict.get("rigid_bodies", [])
+
+        formatted_rows = []
+        for rb in rigid_bodies:
+            if rb.get("tracking_valid", False):  # Only process valid tracked bodies
+                formatted_rows.append({
+                    "Frame Number": frame_number,
+                    "Timestamp": timestamp,
+                    "Rigid Body ID": rb.get("id", None),
+>>>>>>> 13d9b14fa5d302b44db1fd7f65c6aec6acabe257
                     "Position X": rb.get("position", [None, None, None])[0],
                     "Position Y": rb.get("position", [None, None, None])[1],
                     "Position Z": rb.get("position", [None, None, None])[2],
@@ -63,7 +80,10 @@ def format_data(data_dict):
     except Exception as e:
         print(f"Error formatting data: {e}")
         return []
+<<<<<<< HEAD
 
+=======
+>>>>>>> 13d9b14fa5d302b44db1fd7f65c6aec6acabe257
     
 def receive_new_frame(data_dict):
     """
