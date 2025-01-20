@@ -45,7 +45,7 @@ def preprocess_data(raw_data):
             print(f"Warning: Skipping invalid data entry: {entry[:50]}...")
     return parsed_data
 
-def start_client(server_ip="10.24.20.226", port=5000):
+def start_client(server_ip="10.24.20.204", port=5000):
     """
     Start the client to receive and process data from the server.
     """
