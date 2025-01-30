@@ -1,8 +1,13 @@
 import sys
 import time
 import socket
-import json
+import csv
 from NatNetClient import NatNetClient
+
+# Global variables
+last_sent_frame = None
+reference_marker = [0, 0, 0]  # Reference marker for relative position calculation
+
 
 def my_parse_args(arg_list, args_dict):
     """
@@ -18,106 +23,94 @@ def my_parse_args(arg_list, args_dict):
                 args_dict["use_multicast"] = True
                 if arg_list[3][0].upper() == "U":
                     args_dict["use_multicast"] = False
-
     return args_dict
 
 
 def format_data(data_dict):
     """
-    Format the raw MoCap data into a structured dictionary.
-    Each rigid body data is represented with frame number and timestamp.
-<<<<<<< HEAD
-    Replace rigid body IDs with their names.
+    Format the raw MoCap data into structured output with relative positioning.
     """
+    global reference_marker
     try:
-        # Example mapping from IDs to names (update this dynamically if needed)
         rigid_body_id_to_name = {
-            66: "HandLeft",
-            67: "HandRight",
-            68: "Head",
+            63: "HandLeft",
+            64: "HandRight",
+            62: "Head",
         }
 
         frame_number = data_dict.get("frame_number", None)
         timestamp = data_dict.get("timestamp", None)
         rigid_bodies = data_dict.get("rigid_bodies", [])
 
-        formatted_rows = []
+        # Set reference marker to the position of the "Head" (ID 62)
         for rb in rigid_bodies:
-            if rb.get("tracking_valid", False):  # Only process valid tracked bodies
+            if rb.get("id") == 62 and rb.get("tracking_valid", False):
+                reference_marker = rb.get("position", [0, 0, 0])
+                break
+
+        left_hand = None
+        right_hand = None
+
+        for rb in rigid_bodies:
+            if rb.get("tracking_valid", False):
                 rigid_body_id = rb.get("id", None)
-                rigid_body_name = rigid_body_id_to_name.get(rigid_body_id, f"Unknown (ID {rigid_body_id})")
-                
-                formatted_rows.append({
-                    "Frame Number": frame_number,
-                    "Timestamp": timestamp,
-                    "Rigid Body Name": rigid_body_name,
-=======
-    Only include rigid bodies with tracking_valid set to True.
-    """
-    try:
-        frame_number = data_dict.get("frame_number", None)
-        timestamp = data_dict.get("timestamp", None)
-        rigid_bodies = data_dict.get("rigid_bodies", [])
+                if rigid_body_id == 63:  # Left Hand
+                    left_hand = rb.get("position", [0, 0, 0])
+                elif rigid_body_id == 64:  # Right Hand
+                    right_hand = rb.get("position", [0, 0, 0])
 
-        formatted_rows = []
-        for rb in rigid_bodies:
-            if rb.get("tracking_valid", False):  # Only process valid tracked bodies
-                formatted_rows.append({
-                    "Frame Number": frame_number,
-                    "Timestamp": timestamp,
-                    "Rigid Body ID": rb.get("id", None),
->>>>>>> 13d9b14fa5d302b44db1fd7f65c6aec6acabe257
-                    "Position X": rb.get("position", [None, None, None])[0],
-                    "Position Y": rb.get("position", [None, None, None])[1],
-                    "Position Z": rb.get("position", [None, None, None])[2],
-                    "Rotation X": rb.get("rotation", [None, None, None, None])[0],
-                    "Rotation Y": rb.get("rotation", [None, None, None, None])[1],
-                    "Rotation Z": rb.get("rotation", [None, None, None, None])[2],
-                    "Rotation W": rb.get("rotation", [None, None, None, None])[3],
-                })
-        return formatted_rows
-
+        if left_hand and right_hand:
+            return [[
+                frame_number,
+                timestamp,
+                round(right_hand[0] - reference_marker[0], 4),
+                round(right_hand[1] - reference_marker[1], 4),
+                round(right_hand[2] - reference_marker[2], 4),
+                round(left_hand[0] - reference_marker[0], 4),
+                round(left_hand[1] - reference_marker[1], 4),
+                round(left_hand[2] - reference_marker[2], 4)
+            ]]
+        else:
+            return []
     except Exception as e:
         print(f"Error formatting data: {e}")
         return []
-<<<<<<< HEAD
 
-=======
->>>>>>> 13d9b14fa5d302b44db1fd7f65c6aec6acabe257
-    
+
 def receive_new_frame(data_dict):
     """
     Callback function triggered for each new frame of MoCap data.
-    Formats the data and streams it to the client as JSON.
+    Formats the data and streams it to the client as CSV.
     """
-    global client_socket
+    global client_socket, last_sent_frame
 
-    # Format the data
     formatted_rows = format_data(data_dict)
+
+    if formatted_rows:
+        frame_number = formatted_rows[0][0]
+        if frame_number == last_sent_frame:
+            return  # Skip duplicate frames
+        last_sent_frame = frame_number
 
     if client_socket:
         try:
-            # Send each row as a separate JSON object
-            for row in formatted_rows:
-                json_data = json.dumps(row)
-                client_socket.sendall(json_data.encode("utf-8") + b'\n')  # Add newline for easy parsing
+            # Convert list of rows into CSV format
+            csv_data = "\n".join([";".join(map(str, row)) for row in formatted_rows]) + "\n"
+            client_socket.sendall(csv_data.encode("utf-8"))
         except Exception as e:
             print(f"Error sending data: {e}")
     else:
         print("No client connected. Data not sent.")
 
 
-# Main script
 if __name__ == "__main__":
     optionsDict = {}
     optionsDict["clientAddress"] = "0.0.0.0"
     optionsDict["serverAddress"] = "127.0.0.1"
     optionsDict["use_multicast"] = True
 
-    # Parse arguments from command line
     optionsDict = my_parse_args(sys.argv, optionsDict)
 
-    # Start the TCP socket server
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((optionsDict["clientAddress"], 5000))
     server_socket.listen(1)
@@ -131,16 +124,13 @@ if __name__ == "__main__":
         server_socket.close()
         sys.exit(0)
 
-    # Set up the NatNet client
     streaming_client = NatNetClient()
     streaming_client.set_client_address(optionsDict["clientAddress"])
     streaming_client.set_server_address(optionsDict["serverAddress"])
     streaming_client.set_use_multicast(optionsDict["use_multicast"])
 
-    # Assign callback functions
     streaming_client.new_frame_listener = receive_new_frame
 
-    # Start the NatNet client
     is_running = streaming_client.run()
     if not is_running:
         print("ERROR: Could not start streaming client.")
@@ -149,7 +139,6 @@ if __name__ == "__main__":
 
     print("\nNatNet Client successfully connected. Listening for data...")
 
-    # Keep the script running
     try:
         while True:
             time.sleep(1)
