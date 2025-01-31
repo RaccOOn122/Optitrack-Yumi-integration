@@ -8,7 +8,7 @@ def save_to_csv(data_list, file_name="Gestures/received_data.csv"):
     Save the received data to a CSV file.
     """
     df = pd.DataFrame(data_list, columns=[
-        "Frame Number", "Timestamp", "Right Hand X", "Right Hand Y", "Right Hand Z", "Left Hand X", "Left Hand Y", "Left Hand Z"
+        "Right_X", "Right_Y", "Right_Z", "Left_X", "Left_Y", "Left_Z"
     ])
     
     os.makedirs(os.path.dirname(file_name), exist_ok=True)
@@ -21,7 +21,7 @@ def save_to_csv(data_list, file_name="Gestures/received_data.csv"):
 
 def preprocess_data(raw_data):
     """
-    Parse and clean the raw data from CSV format.
+    Parse and clean the raw data from CSV format, excluding frame number and timestamp columns.
     """
     parsed_data = []
     for entry in raw_data:
@@ -30,12 +30,13 @@ def preprocess_data(raw_data):
             for line in lines:
                 values = line.split(';')
                 if len(values) == 8:  # Ensure correct number of columns
-                    parsed_data.append(values)
+                    parsed_data.append(values[2:])  # Exclude the first two columns
                 else:
                     print(f"Warning: Skipping invalid data entry: {line[:50]}...")
         except Exception as e:
             print(f"Error processing data: {e}")
     return parsed_data
+
 
 def start_client(server_ip="10.24.20.218", port=5000):
     """
@@ -50,7 +51,7 @@ def start_client(server_ip="10.24.20.218", port=5000):
         while True:
             data = client_socket.recv(4096).decode("utf-8")
             if data:
-                print("Received data:", data[:180], "...")
+                print("Received data:", data)
                 new_data = preprocess_data([data])
                 if new_data:
                     save_to_csv(new_data, file_name)

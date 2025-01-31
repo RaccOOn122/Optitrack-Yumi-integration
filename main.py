@@ -33,8 +33,8 @@ def format_data(data_dict):
     global reference_marker
     try:
         rigid_body_id_to_name = {
-            63: "HandLeft",
-            64: "HandRight",
+            64: "HandLeft",
+            63: "HandRight",
             62: "Head",
         }
 
