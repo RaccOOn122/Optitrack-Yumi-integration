@@ -27,9 +27,8 @@ def my_parse_args(arg_list, args_dict):
 
 
 def format_data(data_dict):
-    """
-    Format the raw MoCap data into structured output with relative positioning.
-    """
+
+    
     global reference_marker
     try:
         rigid_body_id_to_name = {
